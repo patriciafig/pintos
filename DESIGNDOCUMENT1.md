@@ -30,6 +30,15 @@ http://www.scs.stanford.edu/15au-cs140/pintos/pintos_1.html#SEC2
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+
+- In thread.h, added variable to thread struct:
+
+**int64_t sleep_time;**     -- makes the timer built into the thread 
+  
+If a thread is sleeping, ticks indicate the tick value when the thread is
+done sleeping and ready to be unblocked.
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
