@@ -1,35 +1,38 @@
-			+--------------------+
-			| PINTOS             |
-			| PROJECT 1: THREADS |
-			| DESIGN DOCUMENT    |
-			+--------------------+
-				   
----- NAME ----
 
-Patricia Figueroa 
-patricia.figueroa@ucdenver.edu 
+# PINTOS             
+**PROJECT 1: THREADS**
+**DESIGN DOCUMENT   ** 
 
+----------------- 
 
----- PRELIMINARIES ----
+**NAME**
 
->> If you have any preliminary comments on your submission, notes for the
->> TAs, or extra credit, please give them here.
+**Patricia Figueroa 
+patricia.figueroa@ucdenver.edu **
 
->> Please cite any offline or online sources you consulted while
->> preparing your submission, other than the Pintos documentation, course
->> text, lecture notes, and course staff.
+----------------- 
 
-http://www.scs.stanford.edu/15au-cs140/pintos/pintos_1.html#SEC2
+# ---- PRELIMINARIES ---- 
 
-			     ALARM CLOCK
-			     ===========
+> If you have any preliminary comments on your submission, notes for the
+> TAs, or extra credit, please give them here.
+
+> Please cite any offline or online sources you consulted while
+> preparing your submission, other than the Pintos documentation, course
+> text, lecture notes, and course staff.
+
+> http://www.scs.stanford.edu/15au-cs140/pintos/pintos_1.html#SEC2
+
+----------------- 
+
+ # ALARM CLOCK
+			
 
 ---- DATA STRUCTURES ----
 
->> A1: Copy here the declaration of each new or changed `struct' or
->> `struct' member, global or static variable, `typedef', or
->> enumeration.  Identify the purpose of each in 25 words or less.
-
+> A1: Copy here the declaration of each new or changed `struct' or
+> `struct' member, global or static variable, `typedef', or
+> enumeration.  Identify the purpose of each in 25 words or less.
 
 
 - In thread.h, added variable to thread struct:
@@ -39,13 +42,13 @@ http://www.scs.stanford.edu/15au-cs140/pintos/pintos_1.html#SEC2
 If a thread is sleeping, ticks indicate the tick value when the thread is
 done sleeping and ready to be unblocked.
 
----- ALGORITHMS ----
+**ALGORITHMS** 
 
->> A2: Briefly describe what happens in a call to timer_sleep(),
->> including the effects of the timer interrupt handler.
+> A2: Briefly describe what happens in a call to timer_sleep(),
+> including the effects of the timer interrupt handler.
 
->> A3: What steps are taken to minimize the amount of time spent in
->> the timer interrupt handler?
+> A3: What steps are taken to minimize the amount of time spent in
+> the timer interrupt handler?
 
 ---- SYNCHRONIZATION ----
 
@@ -60,8 +63,11 @@ done sleeping and ready to be unblocked.
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
-			 PRIORITY SCHEDULING
-			 ===================
+
+----------------- 
+			 
+# PRIORITY SCHEDULING
+	
 
 ---- DATA STRUCTURES ----
 
