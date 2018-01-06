@@ -22,6 +22,7 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+// fixed-point conversion formula that ends up getting reused multiple times in this file
 #define FP_INT_CONVERT(x) ((x) >= 0 ? ((x) + (1 << (14)) / 2)\
                                    / (1 << (14)) : ((x) - (1 << (14)) / 2)\
                                    / (1 << (14)))
@@ -33,6 +34,10 @@ static struct list ready_list;
 
 // list for threads that are blocked (sleeping)
 static struct list sleeping_threads;
+
+// load_avg for advanced priority, fixed-point number
+static int load_avg;
+
 
 // List of all processes.
 // Processes are added to this list when they are first scheduled and removed when they exit.
@@ -112,6 +117,8 @@ thread_init (void)
     init_thread (initial_thread, "main", PRI_DEFAULT);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid ();
+
+    load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -192,7 +199,6 @@ thread_create (const char *name, int priority,
 
     ASSERT (function != NULL);
 
-
     //Allocates the thread
     t = palloc_get_page (PAL_ZERO);
     if (t == NULL)
@@ -226,6 +232,18 @@ thread_create (const char *name, int priority,
 
     //to run queue
     thread_unblock (t);
+
+    // The BSD scheduler does not allow threads to control their own priorities
+    if (thread_mlfqs) {
+        calculate_recent_cpu(t, NULL);
+        calculate_advanced_priority(t, NULL);
+        calculate_recent_cpu_for_thread();
+        calculate_advanced_priority_for_thread();
+    }
+
+    if (t->priority > thread_current()->priority) {
+        yield_current_thread(thread_current());
+    }
 
     return tid;
 }
@@ -372,35 +390,35 @@ int thread_get_priority (void) {
     return thread_current()->priority;
 }
 
-/* Sets the current thread's nice value to NICE. */
-void
-thread_set_nice (int nice UNUSED)
-{
-    /* Not yet implemented. */
+// update a thread's nice value
+void thread_set_nice(int new_nice) {
+    ASSERT (new_nice >= NICE_MIN && new_nice <= NICE_MAX);
+
+    struct thread *cur = thread_current();
+    cur->nice = new_nice;
+
+    // calculate_recent_cpu_for_thread ();
+    calculate_advanced_priority_for_thread();
+
+    // after updating the nice value, the priority will have changed
+    // so update the ready list to make sure it remains sorted based on priority
+    if (cur != idle_thread) {
+        if (cur->status == THREAD_READY) {
+            enum intr_level interrupt_state = intr_disable();
+
+            list_remove (&cur->elem);
+            list_insert_ordered (&ready_list, &cur->elem, compare_thread_priorities, NULL);
+
+            intr_set_level(interrupt_state);
+        } else if (cur->status == THREAD_RUNNING && list_entry(list_begin (&ready_list), struct thread, elem)->priority > cur->priority) {
+            yield_current_thread(cur);
+        }
+    }
 }
 
 /* Returns the current thread's nice value. */
-int
-thread_get_nice (void)
-{
-    /* Not yet implemented. */
-    return 0;
-}
-
-/* Returns 100 times the system load average. */
-int
-thread_get_load_avg (void)
-{
-    /* Not yet implemented. */
-    return 0;
-}
-
-/* Returns 100 times the current thread's recent_cpu value. */
-int
-thread_get_recent_cpu (void)
-{
-    /* Not yet implemented. */
-    return 0;
+int thread_get_nice (void) {
+    return thread_current()->nice;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -486,11 +504,29 @@ static void init_thread (struct thread *t, const char *name, int priority)
     strlcpy (t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
     t->priority = priority;
-    
+
+    // Implementation for donation should use if (!thread_mlfqs)
+    // mlfqs does not account for donation
+
     t->initial_priority = priority;
     t->donated = false;
     list_init (&t->locks_held);
-    t->blocker = NULL;
+    t->lock_blocked_by = NULL;
+
+    // if we're using BSD scheduler
+    if (thread_mlfqs) {
+        if (t == initial_thread) {
+            // the initial thread has a default niceness of 0
+            t->nice = 0;
+
+            // the initial thread has received 0 CPU recently
+            t->recent_cpu = 0;
+        } else {
+            // if the thread is not initial, it inherits these values from its parent
+            t->nice = thread_get_nice();
+            t->recent_cpu = thread_get_recent_cpu();
+        }
+    }
 
     t->magic = THREAD_MAGIC;
     list_push_back (&all_list, &t->allelem);
@@ -748,4 +784,75 @@ bool compare_thread_priorities(const struct list_elem *lhs, const struct list_el
     } else {
         return false;
     }
+}
+
+// Custom functions for advanced scheduler
+
+//returns the system load average * 100
+int thread_get_load_avg (void) { return FP_INT_CONVERT(((load_avg) * (100))); }
+
+//returns the recent_cpu value value * 100
+int thread_get_recent_cpu (void) { return FP_INT_CONVERT(((thread_current()->recent_cpu) * (100))); }
+
+// run the calculate_advanced_priority function for the current thread
+void calculate_advanced_priority_for_thread(void) { calculate_advanced_priority(thread_current(), NULL); }
+
+// runs the calculated_advanced_priority function for every thread in the system
+void calculate_advanced_priority_for_all_threads(void) {
+    thread_foreach (calculate_advanced_priority, NULL);
+
+    // now that we have recalculated priorities, make sure the ready_list stays sorted
+    if (!list_empty(&ready_list)) {
+        list_sort(&ready_list, compare_thread_priorities, NULL);
+    }
+}
+
+// determines thread priority for BSD scheduling with the formula priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+void calculate_advanced_priority (struct thread *cur, void *aux UNUSED) {
+    if (cur != idle_thread) {
+        // adjust the priority to be between PRI_MIN and PRI_MAX (0 - 63)
+        cur->priority = PRI_MAX - FP_INT_CONVERT(((cur->recent_cpu) / (4))) - cur->nice * 2;
+
+        // check if the priority is still in the priority boundary and handle accordingly
+        if (cur->priority < PRI_MIN) {
+            cur->priority = PRI_MIN;
+        } else if (cur->priority > PRI_MAX) {
+            cur->priority = PRI_MAX;
+        }
+    }
+}
+
+// runs the calculate_recent_cpu function for the current thread
+void calculate_recent_cpu_for_thread(void) { calculate_recent_cpu(thread_current(), NULL); }
+
+// runs the calculate_recent_cpu_for_all_threads function for every thread
+void calculate_recent_cpu_for_all_threads(void) { thread_foreach (calculate_recent_cpu, NULL); }
+
+// calculates the recent_cpu value with the formula
+// recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice
+void calculate_recent_cpu (struct thread *cur, void *aux UNUSED) {
+    if (cur != idle_thread) {
+        // do the calculation using fixed-point conversions
+        int load = ((load_avg) * (2));
+        int coefficient = ((int64_t)(load)) * (1 << (14)) / ((load) + 1 * (1 << (14)));
+        cur->recent_cpu = (((int64_t)(coefficient)) * (cur->recent_cpu) / (1 << (14))) + (cur->nice) * (1 << (14));
+    }
+}
+
+// calculates the load_avg with the formula
+// load_avg = (59/60)*load_avg + (1/60)*ready_threads
+void calculate_load_avg (void) {
+    struct thread *cur = thread_current();
+    int ready_list_threads = list_size(&ready_list);
+
+    int num_ready_threads;
+    // a thread that is idle is not a ready thread
+    if (cur != idle_thread) {
+        num_ready_threads = ready_list_threads + 1;
+    } else {
+        num_ready_threads = ready_list_threads;
+    }
+
+    // do the calculation using fixed-point conversions
+    load_avg = ((int64_t)(((59 * (1 << (14))) / (60)))) * (load_avg) / (1 << (14)) + ((((1 * (1 << (14))) / (60))) * (num_ready_threads));
 }

@@ -199,6 +199,31 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
     ticks++;
     thread_tick ();
+
+    if (thread_mlfqs) {
+        struct thread *cur = thread_current();
+
+        // if the current thread is running, increment its recent CPU
+        if (cur->status == THREAD_RUNNING) {
+            cur->recent_cpu = cur->recent_cpu + 1 * (1 << (14)); // 1 + FP (increment and account for floating point)
+        }
+
+        // when this is true, one second of system time has passed
+        // we must recalculate recent_cpu
+        if (ticks % TIMER_FREQ == 0) {
+            // calculate the load average first
+            calculate_load_avg();
+
+            // once load average is calculated, calculate the recent cpu
+            calculate_recent_cpu_for_all_threads();
+        }
+
+        // when this is true, we recalculate the recent_cpu,
+        // but tests indicate that there's no need to calculate the load_average
+        if (ticks % 4 == 0) {
+            calculate_advanced_priority_for_all_threads();
+        }
+    }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

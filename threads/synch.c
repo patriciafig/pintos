@@ -220,10 +220,11 @@ lock_acquire (struct lock *lock)
 
     if (lock_holder != NULL) {
         // If the lock holder isn't NULL, then it must be blocking the current thread
-        current_thread->blocker = lock;
+        current_thread->lock_blocked_by = lock;
     }
 
-    while (lock_holder != NULL && lock_holder->priority < current_thread->priority) {
+    // does not apply for BSD scheduling because it does not use multiple donation
+    while (!thread_mlfqs && lock_holder != NULL && lock_holder->priority < current_thread->priority) {
         // donate the priority of the current thread to the lock holder
         thread_set_priority_with_donation(lock_holder, current_thread->priority, true);
 
@@ -234,9 +235,9 @@ lock_acquire (struct lock *lock)
 
         // if the lock holder is blocked by another thread with a lock,
         // then the lock to acquire is that thread which is blocking, so make that thread the new lock holder
-        if (lock_holder->blocker != NULL && num_locks < 8) { // num_locks can be less than 8 per Stanford instructions
-            lock_next = lock_holder->blocker;
-            lock_holder = lock_holder->blocker->holder;
+        if (lock_holder->lock_blocked_by != NULL && num_locks < 8) { // num_locks can be less than 8 per Stanford instructions
+            lock_next = lock_holder->lock_blocked_by;
+            lock_holder = lock_holder->lock_blocked_by->holder;
             num_locks++;
         }
         else {
@@ -251,11 +252,14 @@ lock_acquire (struct lock *lock)
     // finally, make the current thread the lock holder
     lock->holder = current_thread;
 
-    // the current thread has acquired the lock, so there is nothing blocking it now
-    current_thread->blocker = NULL;
+    // does not apply for BSD scheduling because it does not use multiple donation
+    if (!thread_mlfqs) {
+        // the current thread has acquired the lock, so there is nothing blocking it now
+        current_thread->lock_blocked_by = NULL;
 
-    // add the recently acquired lock to the thread's locks_held list
-    list_insert_ordered (&current_thread->locks_held, &lock->elem_lock, compare_lock_priorities, NULL);
+        // add the recently acquired lock to the thread's locks_held list
+        list_insert_ordered (&current_thread->locks_held, &lock->elem_lock, compare_lock_priorities, NULL);
+    }
 
     // turn interrupts back on
     intr_set_level(interrupt_state);
@@ -304,29 +308,32 @@ lock_release (struct lock *lock) {
     // call signal() to free the semaphore
     sema_up(&lock->semaphore);
 
-    // remove lock from the locks_held list
-    list_remove (&lock->elem_lock);
+    // does not apply for BSD scheduling because it does not use multiple donation
+    if (!thread_mlfqs) {
+        // remove lock from the locks_held list
+        list_remove (&lock->elem_lock);
 
-    // reset lock to default
-    lock->priority_lock = -1;
+        // reset lock to default
+        lock->priority_lock = -1;
 
-    // make sure the current thread has acquired lock
-    if (list_empty(&current_thread->locks_held)) {
+        // make sure the current thread has acquired lock
+        if (list_empty(&current_thread->locks_held)) {
 
-        // disregard any donated priority used in implementation
-        current_thread->donated = false;
+            // disregard any donated priority used in implementation
+            current_thread->donated = false;
 
-        thread_set_priority(current_thread->initial_priority);
-    } else {
-        // handle the case of multiple donation
-
-        struct lock *lock_first = list_entry (list_front (&current_thread->locks_held), struct lock, elem_lock);
-
-        // we donate the priority if there exists threads in the locks list
-        if (lock_first->priority_lock != -1) {
-            thread_set_priority_with_donation(current_thread, lock_first->priority_lock, true);
-        } else {
             thread_set_priority(current_thread->initial_priority);
+        } else {
+            // handle the case of multiple donation
+
+            struct lock *lock_first = list_entry (list_front (&current_thread->locks_held), struct lock, elem_lock);
+
+            // we donate the priority if there exists threads in the locks list
+            if (lock_first->priority_lock != -1) {
+                thread_set_priority_with_donation(current_thread, lock_first->priority_lock, true);
+            } else {
+                thread_set_priority(current_thread->initial_priority);
+            }
         }
     }
 

@@ -110,8 +110,10 @@ struct thread
 
     int initial_priority;
     bool donated;
-    struct list locks_held;               /* All locks_held a thread holds */
-    struct lock *blocker;         /* Thread blocked by lock */
+    struct list locks_held;               /* All locks a thread holds */
+    struct lock *lock_blocked_by;         /* Thread blocked by lock */
+    int nice;                             /* Nice value for thread */
+    int recent_cpu;                       /* Recent CPU value for thread */
 };
 
 /* If false (default), use round-robin scheduler.
@@ -132,7 +134,6 @@ void thread_block (void);
 void thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
-tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
@@ -160,6 +161,13 @@ void wakeup_threads_if_needed(void);
 bool compare_thread_priorities(const struct list_elem*, const struct list_elem*, void* args);
 void yield_current_thread(struct thread*);
 
+// custom functions for advanced scheduler
+void calculate_advanced_priority_for_thread(void);
+void calculate_advanced_priority_for_all_threads(void);
+void calculate_advanced_priority(struct thread *, void *aux);
+void calculate_recent_cpu_for_thread(void);
+void calculate_recent_cpu_for_all_threads(void);
+void calculate_recent_cpu(struct thread *, void *aux);
+void calculate_load_avg(void);
 
 #endif /* threads/thread.h */
-
