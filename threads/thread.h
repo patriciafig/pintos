@@ -4,15 +4,17 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
-  {
+{
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
-  };
+};
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -23,6 +25,10 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Nice value boundary */
+#define NICE_MIN -20
+#define NICE_MAX 20
 
 /* A kernel thread or user process.
 
@@ -76,12 +82,12 @@ typedef int tid_t;
    value, triggering the assertion. */
 /* The `elem' member has a dual purpose.  It can be an element in
    the run queue (thread.c), or it can be an element in a
-   semaphore wait list (synch.c). It can be used these two ways
+   semaphore wait list (synch.c).  It can be used these two ways
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 struct thread
-  {
+{
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
@@ -89,6 +95,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    int64_t sleep_time;                 /* make timer built into the thread */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -99,11 +106,13 @@ struct thread
 #endif
 
     /* Owned by thread.c. */
-    // Define thread properties here
     unsigned magic;                     /* Detects stack overflow. */
 
-    int64_t sleep_time; // make timer built into the thread
-  };
+    int initial_priority;
+    bool donated;
+    struct list locks_held;               /* All locks_held a thread holds */
+    struct lock *blocker;         /* Thread blocked by lock */
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -135,16 +144,22 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_set_priority_with_donation(struct thread *, int, bool);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-// custom functions
-bool compare_sleep_ticks(const struct list_elem*, const struct list_elem*, void* args);
+// custom functions for alarm
+bool compare_sleep_ticks(const struct list_elem*, const struct list_elem*, void*);
 struct list* get_sleeping_threads(void);
 void wakeup_threads_if_needed(void);
 
+// custom functions for priority scheduling
+bool compare_thread_priorities(const struct list_elem*, const struct list_elem*, void* args);
+void yield_current_thread(struct thread*);
+
 
 #endif /* threads/thread.h */
+
