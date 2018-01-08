@@ -29,28 +29,18 @@ typedef int tid_t;
  #define NICE_MIN -20
  #define NICE_MAX 20
 
-// for user programs
-struct child_status {
-    tid_t child_id;
-    bool is_exit_called;
-    bool has_been_waited;
-    int child_exit_status;
-    struct list_elem elem_child_status;
-};
-
-
 /* A struct to keep track of a thread's children's information,
  * including exit status, if it is terminated by kernel, and
  * if process_wait has been called successfully
  */
-// TODO: Describe
-struct waiting_child
-{
-    tid_t child_id;                          // thread_id
-    int child_exit_status;
-    bool is_terminated_by_kernel;
+
+// For User Programs
+struct child_status {
+    tid_t child_id;     //thread_id
+    bool is_exit_called;
     bool has_been_waited;
-    struct list_elem elem_waiting_child;     // itself
+    int child_exit_status;
+    struct list_elem elem_child_status;   //itself 
 };
 
 /* A kernel thread or user process.
