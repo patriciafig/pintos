@@ -1,4 +1,1 @@
-/home/patricia/Desktop/clion-2017.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/gcc -G "CodeBlocks - Unix Makefiles" /home/patricia/Desktop/os-pintos/project-2-3
--- Configuring done
--- Generating done
--- Build files have been written to: /home/patricia/Desktop/os-pintos/project-2-3/cmake-build-debug
+CMakeLists.txt not found in /home/patricia/Desktop/os-pintos/project-2-3
